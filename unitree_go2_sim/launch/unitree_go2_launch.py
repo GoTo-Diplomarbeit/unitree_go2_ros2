@@ -75,6 +75,13 @@ def generate_launch_description():
         default_value="effort",
         description="ros2_control joint command interface: effort or position",
     )
+    declare_static_map_to_odom = DeclareLaunchArgument(
+        "static_map_to_odom",
+        default_value="true",
+        description="Publish a fixed map->odom transform (no correction). Set to false when "
+                    "SLAM/localization (slam_toolbox, RTAB-Map, AMCL) publishes map->odom itself - "
+                    "two publishers for the same frame break TF",
+    )
     declare_disable_camera = DeclareLaunchArgument(
         "disable_camera", default_value="false", description="Leave out the mono camera"
     )
@@ -181,7 +188,7 @@ def generate_launch_description():
         remappings=[("odometry/filtered", "odom")],
     )
 
-    # Go2 static frame connection (map -> odom)
+    # Go2 static frame connection (map -> odom). Only when no SLAM provides it.
     map_to_odom_tf_node = Node(
         package='tf2_ros',
         name='map_to_odom_tf_node',
@@ -191,6 +198,7 @@ def generate_launch_description():
             '--roll', '0', '--pitch', '0', '--yaw', '0',
             '--frame-id', 'map', '--child-frame-id', 'odom'
         ],
+        condition=IfCondition(LaunchConfiguration("static_map_to_odom")),
     )
 
     rviz2 = Node(
@@ -346,6 +354,7 @@ def generate_launch_description():
             declare_world_init_heading,
             declare_description_path, 
             declare_command_interface,
+            declare_static_map_to_odom,
             declare_disable_camera,
             declare_disable_d455,
             declare_disable_lidar_l1,
@@ -372,10 +381,10 @@ def generate_launch_description():
             # EKF nodes for localization
             base_to_footprint_ekf,
             footprint_to_odom_ekf,
-            
+
             # Static TF publisher for frame connections
             map_to_odom_tf_node,
-            
+
             # Controller spawners that handle the complete lifecycle
             controller_spawner_js,
             controller_spawner_effort,
