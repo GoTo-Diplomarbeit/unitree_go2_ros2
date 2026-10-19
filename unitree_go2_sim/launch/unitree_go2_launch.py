@@ -9,11 +9,42 @@ from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
     IncludeLaunchDescription,
+    OpaqueFunction,
     TimerAction,
 )
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
+
+
+def resolve_world_path(world, worlds_directory):
+    """
+    Turn the value of the "world" launch argument into the path of an .sdf file.
+
+    Accepts either
+      - a short name of a world in unitree_go2_description/worlds/, e.g.
+        "school_with_person" (the ".sdf" may be left out), or
+      - a path to any .sdf file, e.g. "/home/me/my_world.sdf".
+    """
+    if os.sep in world:
+        # Contains a "/" -> it is a path, not a name (relative paths start from the
+        # folder the launch was started in).
+        world_path = os.path.abspath(world)
+    else:
+        world_file = world if world.endswith(".sdf") else world + ".sdf"
+        world_path = os.path.join(worlds_directory, world_file)
+
+    if not os.path.isfile(world_path):
+        # Fail early with a helpful list instead of Gazebo's vague "unable to find file".
+        available_worlds = sorted(
+            os.path.splitext(name)[0] for name in os.listdir(worlds_directory) if name.endswith(".sdf")
+        )
+        raise RuntimeError(
+            f"Gazebo world '{world}' not found ({world_path}). "
+            f"Available worlds: {', '.join(available_worlds)}. "
+            "New .sdf files need a rebuild (colcon build) before they can be found."
+        )
+    return world_path
 
 
 def generate_launch_description():
@@ -31,7 +62,7 @@ def generate_launch_description():
     gait_config = os.path.join(unitree_go2_sim, "config/gait/gait.yaml")
     links_config = os.path.join(unitree_go2_sim, "config/links/links.yaml")
     default_model_path = os.path.join(unitree_go2_description, "urdf/unitree_go2_robot.xacro")
-    default_world_path = os.path.join(unitree_go2_description, "worlds/default.sdf")
+    worlds_directory = os.path.join(unitree_go2_description, "worlds")
 
     declare_use_sim_time = DeclareLaunchArgument(
         "use_sim_time",
@@ -53,7 +84,10 @@ def generate_launch_description():
         description="Ros control config path",
     )
     declare_gazebo_world = DeclareLaunchArgument(
-        "world", default_value=default_world_path, description="Gazebo world name"
+        "world",
+        default_value="default",
+        description="Gazebo world: the name of a file in unitree_go2_description/worlds/ "
+                    "(e.g. default, school_with_person) or a full path to an .sdf file",
     )
 
     declare_gui = DeclareLaunchArgument(
@@ -211,14 +245,23 @@ def generate_launch_description():
     
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
     
-    # Setup to launch the simulator and Gazebo world
-    gz_sim = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')),
-        launch_arguments={
-            'gz_args': [LaunchConfiguration('world'), ' -r']  # Add -r flag to start unpaused
-        }.items(),
-    )
+    # Setup to launch the simulator and Gazebo world.
+    # OpaqueFunction: the world argument is only known at launch time, and turning a
+    # short name into a file path needs plain Python - so this runs once the argument
+    # has its value, and then hands Gazebo the resolved path.
+    def start_gazebo_with_world(context):
+        world_path = resolve_world_path(LaunchConfiguration('world').perform(context), worlds_directory)
+        return [
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')),
+                launch_arguments={
+                    'gz_args': world_path + ' -r'  # Add -r flag to start unpaused
+                }.items(),
+            )
+        ]
+
+    gz_sim = OpaqueFunction(function=start_gazebo_with_world)
     
     # Spawn robot in Gazebo Sim
     gazebo_spawn_robot = Node(

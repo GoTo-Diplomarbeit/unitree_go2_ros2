@@ -95,6 +95,23 @@ ros2 launch unitree_go2_sim unitree_go2_launch.py
 
 ![Unitree Go2 Simulation](docs/unitree_go2_sim.png)
 
+#### Choosing a world
+
+The worlds live in `unitree_go2_description/worlds/`. Pick one by its file name
+(without `.sdf`); without `world:=` the `default` world is used:
+
+| World | Contents |
+|-------|----------|
+| `default` | School entrance mockup |
+| `school_with_person` | Same mockup + a standing person 2 m in front of the robot |
+
+```bash
+ros2 launch unitree_go2_sim unitree_go2_launch.py world:=school_with_person
+```
+
+A full path to any `.sdf` file also works. New `.sdf` files need a `colcon build`
+before they can be found.
+
 #### Joint command interface
 
 The joints are driven through `ros2_control`. By default the effort
