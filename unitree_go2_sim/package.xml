@@ -18,6 +18,10 @@
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>ros-jazzy-ros-gz</exec_depend>
+  <exec_depend>ros-jazzy-ros2controlcli</exec_depend>
+  <exec_depend>ros-jazzy-ros2-controllers</exec_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>
